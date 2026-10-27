@@ -53,8 +53,39 @@ describe('RevocationList', () => {
     });
   });
 
-  // ponytail: encode/decode round-trip tests skipped — @techsavvyash/bitstring
-  // has a broken base64url dependency in this environment. The encode/decode
-  // path is covered by status-list.service.spec.ts integration tests.
-  describe.skip('encode / decode round-trip (skipped: broken bitstring dep)', () => {});
+  describe('encode / decode round-trip', () => {
+    it('encodes to an unpadded base64url string of GZIP data', async () => {
+      const list = new RevocationList({ length: 1000 });
+      const encoded = await list.encode();
+
+      expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
+      const raw = Buffer.from(encoded, 'base64url');
+      expect(raw[0]).toBe(0x1f);
+      expect(raw[1]).toBe(0x8b);
+    });
+
+    it('keeps revoked indices after encode and decode', async () => {
+      const list = new RevocationList({ length: 10000 });
+      list.setRevoked(3, true);
+      list.setRevoked(77, true);
+      list.setRevoked(9999, true);
+
+      const decoded = await RevocationList.decode({ encodedList: await list.encode() });
+
+      expect(decoded.isRevoked(3)).toBe(true);
+      expect(decoded.isRevoked(77)).toBe(true);
+      expect(decoded.isRevoked(9999)).toBe(true);
+      expect(decoded.isRevoked(0)).toBe(false);
+      expect(decoded.isRevoked(4)).toBe(false);
+      expect(decoded.isRevoked(5000)).toBe(false);
+    });
+
+    it('round-trips a list with nothing revoked', async () => {
+      const list = new RevocationList({ length: 1000 });
+      const decoded = await RevocationList.decode({ encodedList: await list.encode() });
+
+      expect(decoded.isRevoked(0)).toBe(false);
+      expect(decoded.isRevoked(999)).toBe(false);
+    });
+  });
 });
